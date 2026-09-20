@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>WASM Sidecar Test</title>
+  <script src="loc_fetch.js"></script>
+<style>
+body { font-family: sans-serif; padding: 20px; background: #eef2f7; line-height: 1.6; }
+.container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+.controls { display: grid; gap: 10px; margin-top: 20px; }
+button { padding: 12px; cursor: pointer; border: none; border-radius: 6px; background: #4a90e2; color: white; font-weight: bold; }
+button:hover { background: #357abd; }
+#log { margin-top: 20px; padding: 15px; background: #1e1e1e; color: #d4d4d4; border-radius: 6px; font-family: 'Courier New', Courier, monospace; min-height: 150px; white-space: pre-wrap; }
+.success { color: #4ec9b0; }
+#id_c1,#id_c2 {border:2px solid red;}
+#id_t1,#id_t2 {width:90vw;min-height:30vh;}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>WASM Sidecar Test 2026</h1>
+<p>Тест загрузки WASM через <b>LocalFetch v9</b></p>
+<p>В режиме сети (http://) он будет искать test.wasm и менять тип mime в зависимости от расширения, но если надо вызвать оригинальный, то вызывать fetch(new Request(url)) </p>
+<p>В режиме (localhost) он будет искать test.wasm но всегда менять тип mime так как там иногда неправильно</p>
+<p>
+В локальном режиме (file://) он будет искать test.wasm.js который надо сделать в <a href="fetch_sidecar_js.htm">fetch_sidecar_js</a><br>
+Три формата сжатия: base64 для любителей ZIP (работает везде, можно вставить в src)/ base85 для любителей RAR, жмет получше, работает быстро/ base122 для фанатов 7z, жмет отлично, но можно еще лучше, только зачем? это локально с диска, не по сети, скорость=0сек. Но для режима - один источник sidecar.js для сети и локально - выгодно.
+Включается глобальным флагом. Тогда вместо двух file.wasm + file.wasm.js только один, он чуть больше, но зато не два. (экономия места и править в одном файле)
+Осторожно! base122 использует Юникод, а это не везде поддерживается полностью.
+</p>
+<p>
+Как в 2026г сделать бесплатно wasm , загрузить в html и выполнить через js?
+Надо завести гугл акк, зайти в гугл облако терминал, запустить чат ИИ gemini,
+попросить его поставить нужные программы чтобы делать wasm, написать ему ТЗ
+или дать код на Си, он всё перепишет и скомпилирует, сразу будет готовый wasm.
+Если надо пример на js как вызывать и передавать массивы, то тоже он напишет.
+Раньше это было сложно и много знать надо, а теперь просто и быстро, любой сможет.
+</p>
+ <div class="controls">
+  <button onclick="loadWasm()">1. Загрузить и запустить WASM</button>
+  <button onclick="calcAdd()">2. Вызвать add(+)</button>
+  <button onclick="calcMult()">3. Вызвать multiply(*)</button>
+ </div>
+<div id="log">Ожидание действий...</div>
+</div>
+
+<hr>
+<h2>Тестируем загрузку видео и копирование кадра</h2>
+<video id="id_v1" controls></video> <video id="id_v2" controls></video>
+<canvas id="id_c1"></canvas><br>
+<button onclick="bb(0)">1. кадр из мп4 sidecar.js+blob+url</button>
+<button onclick="bb(1)">2. кадр из мп4 напрямую: локально будет ошибка</button>
+<textarea id="id_t1"></textarea>
+<hr>
+<h2>Тестируем загрузку PNG и чтение точек</h2>
+<img id="id_i1"></img> <img id="id_i2"></img>
+<canvas id="id_c2"></canvas><br>
+<button onclick="cc(0)">1. из PNG sidecar.js+blob+url</button>
+<button onclick="cc(1)">2. из PNG напрямую: локально будет ошибка</button>
+<textarea id="id_t2"></textarea>
+
+<script>
+    const logDiv = document.getElementById('log');
+    function log(msg, type = ''){
+        const span = document.createElement('span');
+        if(type) span.className = type;
+        span.innerText = `> ${msg}\n`;
+        logDiv.appendChild(span);
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    let wasmInstance = null;
+
+async function loadWasm(){
+        log('Загрузка test.wasm...');
+        try {
+            // LocFetch теперь перехватывает нативный fetch!
+            // WebAssembly.instantiateStreaming использует fetch под капотом.
+            const obj = await WebAssembly.instantiateStreaming(fetch('test.wasm'));
+            wasmInstance = obj.instance;
+            log('WASM модуль успешно инициализирован!', 'success');
+            console.log('wasm: Exports:', wasmInstance.exports);
+        } catch (e) {
+            log('Ошибка загрузки: ' + e, 'error');
+            console.error(e);
+        }
+    }
+
+    function calcAdd(){
+        if (!wasmInstance) return log('Сначала загрузите WASM!');
+        const res = wasmInstance.exports.add(15, 987);
+        log(`Результат add(15, 987) = ${res}`, 'success');
+    }
+
+    function calcMult(){
+        if(!wasmInstance) return log('Сначала загрузите WASM!');
+        const res = wasmInstance.exports.multiply(159, 574);
+        log(`Результат multiply(159, 574) = ${res}`, 'success');
+    };
+//загр кар прямо и декодер
+async function aa(){
+try{
+ var u='mirror.mp4';
+// var v=await fetch(new Request(u));console.log(v); //err
+}
+catch(e){alert(e);}
+
+try{
+ var u='mirror.mp4';
+// var x=await fch_orig(u); console.log(x); //err
+}
+catch(e){alert(e);}
+
+try{
+ var url='mirror.mp4';
+ document.getElementById('id_v2').src=url;
+// var x=await fetch(url); console.log(x); //не тот формат sidecar.js там 64 без кс
+//грузим вручную по имени и номеру
+ var data=await fch_load_sidecar(url+'.js','g_mp4','64','no_ks');
+ var u=fch_DecodeUrl(data,url);
+ document.getElementById('id_v1').src=u;
+ 
+
+ url='favicon.png';
+ document.getElementById('id_i2').src=url;
+ data=await fch_load_sidecar(url+'.js','g_base122','122');
+ u=fch_DecodeUrl(data,url);
+ document.getElementById('id_i1').src=u;
+}
+catch(e){alert(e);}
+
+}
+function bb(v){
+try {
+ var video=document.getElementById('id_v1');
+ if(v)video=document.getElementById('id_v2');
+ var c = document.getElementById('id_c1');
+ c.width=100; c.height=100;
+ var ctx = c.getContext('2d', { willReadFrequently: true });
+ ctx.drawImage(video, 0, 0, 100, 100);
+ data = ctx.getImageData(50, 50, 10, 10).data;
+ var t = document.getElementById('id_t1');;
+ t.value=''+data;
+ }
+catch(e){alert(e);}
+}
+function cc(v){
+try {
+ var im=document.getElementById('id_i1');
+ if(v)im=document.getElementById('id_i2');
+ var c = document.getElementById('id_c2');
+ var w=im.width; c.width=w;
+ var h=im.height; c.height=h;
+ var ctx = c.getContext('2d', { willReadFrequently: true });
+ ctx.drawImage(im, 0, 0, w, h);
+ data = ctx.getImageData(20, 20, 10, 10).data;
+ var t2 = document.getElementById('id_t2');;
+ t2.value=''+data;
+ }
+catch(e){alert(e);}
+}
+
+aa();
+</script>
+
+
+</body>
+</html>

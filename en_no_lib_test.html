@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LocFetch WASM Test Suite</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #eef2f7; line-height: 1.6; }
+  .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+  .controls { display: grid; gap: 10px; margin-top: 20px; }
+  button { padding: 12px; cursor: pointer; border: none; border-radius: 6px; background: #4a90e2; color: white; font-weight: bold; }
+  button:hover { background: #357abd; }
+  #log { margin-top: 20px; padding: 15px; background: #1e1e1e; color: #d4d4d4; border-radius: 6px; font-family: 'Courier New', Courier, monospace; min-height: 150px; white-space: pre-wrap; }
+  .success { color: #4ec9b0; }
+  .error { color: #f44747; }
+  canvas { border: 2px solid #334155; margin-top: 10px; }
+  textarea { width: 100%; min-height: 100px; margin-top: 10px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>LocFetch WASM Test Suite</h1>
+  <p>Testing WASM loading via <b>LocFetch Engine v9</b></p>
+  
+  <div class="controls">
+    <button onclick="loadWasm()">1. Load & Initialize WASM</button>
+    <button onclick="calcAdd()">2. Call add(15, 987)</button>
+    <button onclick="calcMult()">3. Call multiply(159, 574)</button>
+  </div>
+  <div id="log">Waiting for action...</div>
+
+  <hr>
+  <h2>Video Frame Capture Test</h2>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <video id="id_v1" width="200" controls title="Sidecar Source"></video>
+    <video id="id_v2" width="200" controls title="Direct Source"></video>
+  </div>
+  <canvas id="id_c1"></canvas><br>
+  <button onclick="captureFrame('id_v1', 'id_c1', 'id_t1')">Capture from Sidecar</button>
+  <button onclick="captureFrame('id_v2', 'id_c1', 'id_t1')">Capture from Direct (CORS limit)</button>
+  <textarea id="id_t1" readonly></textarea>
+
+  <hr>
+  <h2>Image Data Access Test</h2>
+  <div style="display:flex; gap:10px;">
+    <img id="id_i1" height="100" title="Sidecar Source">
+    <img id="id_i2" height="100" title="Direct Source">
+  </div>
+  <canvas id="id_c2"></canvas><br>
+  <button onclick="readPixels('id_i1', 'id_c2', 'id_t2')">Read from Sidecar</button>
+  <button onclick="readPixels('id_i2', 'id_c2', 'id_t2')">Read from Direct (CORS limit)</button>
+  <textarea id="id_t2" readonly></textarea>
+</div>
+
+<script>
+  const logDiv = document.getElementById('log');
+  let wasmInstance = null;
+
+  function log(msg, type = ''){
+    const span = document.createElement('span');
+    if(type) span.className = type;
+    span.innerText = `> ${msg}\n`;
+    logDiv.appendChild(span);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  async function loadWasm(){
+    console.log('Action: Load WASM'); log('Loading test.wasm...');
+    try {
+      // Intercepted by LocFetch!
+      const obj = await WebAssembly.instantiateStreaming(fetch('test.wasm'));
+      wasmInstance = obj.instance;
+      log('WASM module initialized!', 'success'); console.log('Result: WASM module initialized!');
+    } catch (e) {
+      log('Load failed: ' + e, 'error');
+    }
+  }
+
+  function calcAdd(){
+    if(!wasmInstance) return log('Load WASM first!', 'error');
+    const res = wasmInstance.exports.add(15, 987);
+    log(`Result: add(15, 987) = ${res}`, 'success');
+  }
+
+  function calcMult(){
+    if(!wasmInstance) return log('Load WASM first!', 'error');
+    const res = wasmInstance.exports.multiply(159, 574);
+    log(`Result: multiply(159, 574) = ${res}`, 'success');
+  }
+
+  async function initMedia(){
+    try {
+      const vidUrl = 'mirror.mp4';
+      const imgUrl = 'favicon.png';
+
+      // Load sidecars manually for demo
+      const vidData = await fch_load_sidecar(vidUrl + '.js', 'g_mp4', '64', 'no_ks');
+      document.getElementById('id_v1').src = fch_DecodeUrl(vidData, vidUrl);
+      document.getElementById('id_v2').src = vidUrl;
+
+      const imgData = await fch_load_sidecar(imgUrl + '.js', 'g_base122', '122');
+      document.getElementById('id_i1').src = fch_DecodeUrl(imgData, imgUrl);
+      document.getElementById('id_i2').src = imgUrl;
+      
+      log('Media sources initialized.', 'success');
+    } catch(e) { log('Media init error: ' + e, 'error'); }
+  }
+
+  function captureFrame(vidId, canId, txtId){
+    try {
+      const v = document.getElementById(vidId);
+      const c = document.getElementById(canId);
+      const ctx = c.getContext('2d');
+      c.width = 100; c.height = 100;
+      ctx.drawImage(v, 0, 0, 100, 100);
+      const data = ctx.getImageData(50, 50, 5, 5).data;
+      document.getElementById(txtId).value = 'Pixel Data: ' + data;
+      log('Frame captured from ' + vidId, 'success'); console.log('Result: Frame captured from ' + vidId);
+    } catch(e) { log('Capture error: ' + e, 'error'); console.log('Result: Capture error for ' + vidId + ': ' + e); }
+  }
+
+  function readPixels(imgId, canId, txtId){
+    try {
+      const im = document.getElementById(imgId);
+      const c = document.getElementById(canId);
+      const ctx = c.getContext('2d');
+      c.width = im.width; c.height = im.height;
+      ctx.drawImage(im, 0, 0);
+      const data = ctx.getImageData(0, 0, 5, 5).data;
+      document.getElementById(txtId).value = 'Pixel Data: ' + data;
+      log('Pixels read from ' + imgId, 'success'); console.log('Result: Pixels read from ' + imgId);
+    } catch(e) { log('Read error: ' + e, 'error'); console.log('Result: Read error for ' + imgId + ': ' + e); }
+  }
+
+  initMedia();
+</script>
+</body>
+</html>
