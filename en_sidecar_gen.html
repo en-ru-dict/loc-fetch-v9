@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LocFetch Sidecar Generator v9</title>
+  <style>
+    :root { --primary: #00f2fe; --secondary: #4facfe; --bg: #0f172a; --card: rgba(255, 255, 255, 0.05); }
+    body { font-family: sans-serif; background: var(--bg); color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+    .container { background: var(--card); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 40px; border-radius: 24px; width: 480px; text-align: center; }
+    .btn { display: inline-block; padding: 10px 15px; border-radius: 10px; border: none; cursor: pointer; font-weight: 600; transition: all 0.3s; margin: 3px; font-size: 13px; }
+    .btn[disabled] { cursor: not-allowed; opacity: 0.5; }
+    .btn-select { background: rgba(255,255,255,0.1); color: white; border: 1px dashed rgba(255,255,255,0.3); width: 100%; box-sizing: border-box; }
+    .btn-encode { flex: 1; background: linear-gradient(135deg, var(--secondary), var(--primary)); color: #0f172a; }
+    .btn-save { background: #10b981; color: white; width: 100%; display: none; margin-top: 15px; }
+    #id_status { margin-top: 20px; color: #38bdf8; font-size: 14px; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>LocFetch Helper v9</h1>
+  <label for="id_fp" class="btn btn-select" id="id_fl">📎 Select Binary File</label>
+  <input type="file" id="id_fp">
+  <div style="display:flex; margin-top:20px; flex-wrap: wrap;">
+    <button class="btn btn-encode" id="e64" disabled>Base64</button>
+    <button class="btn btn-encode" id="e85" disabled>Base85</button>
+    <button class="btn btn-encode" id="e122" disabled style="background: linear-gradient(135deg, #ff0080, #7928ca); color: white;">Base122 (Turbo)</button>
+  </div>
+  <div id="id_status">Select a file to begin...</div>
+  <button class="btn btn-save" id="id_sb">💾 Save .js Sidecar</button>
+</div>
+
+<script>
+function el(id){return document.getElementById(id);}
+const fP=el('id_fp'), fL=el('id_fl'), sT=el('id_status'), sB=el('id_sb');
+var g_buf=null, g_name="", g_res="", g_mode="";
+
+function fch_enc85(u8){
+  const C = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#".split('');
+  let r=u8.length%4, p=new Uint8Array(u8.length+(r?4-r:0)); p.set(u8);
+  let dv=new DataView(p.buffer), o="";
+  for(let i=0;i<p.length;i+=4){
+    let v=dv.getUint32(i);
+    o+=C[v/52200625|0]+C[(v/614125|0)%85]+C[(v/7225|0)%85]+C[(v/85|0)%85]+C[v%85];
+  }
+  return r?o.slice(0,r-4):o;
+}
+
+function fch_enc122(u8){
+  var M = new Uint8Array(128).fill(255); 
+  [0,10,13,34,38,92].forEach((v,i)=>M[v]=i);
+  let bitBuf=0, bitCount=0, p=0, out="";
+  const get7=()=>{
+    if(bitCount<7){
+      if(p<u8.length){bitBuf=(bitBuf<<8)|u8[p++]; bitCount+=8;}
+      else if(bitCount>0){let r=(bitBuf<<(7-bitCount))&127; bitCount=0; return r;}
+      else return -1;
+    }
+    bitCount-=7; let r=(bitBuf>>>bitCount)&127; bitBuf&=(1<<bitCount)-1; return r;
+  };
+  while(true){
+    let b1=get7(); if(b1===-1)break;
+    if(M[b1]!==255){
+      let b2=get7();
+      if(b2===-1) out+=String.fromCharCode(1920|b1);
+      else out+=String.fromCharCode((M[b1]<<8)|128|b2);
+    } else out+=String.fromCharCode(b1);
+  }
+  return out;
+}
+
+fP.onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  g_name=f.name; fL.innerText="📄 "+g_name; sT.innerText="Reading...";
+  const r=new FileReader();
+  r.onload=ev=>{
+    g_buf=new Uint8Array(ev.target.result);
+    el('e64').disabled=el('e85').disabled=el('e122').disabled=false;
+    sT.innerText="Ready. Size: "+g_buf.length+" bytes";
+  };
+  r.readAsArrayBuffer(f);
+};
+
+el('e64').onclick = ()=>encode('64');
+el('e85').onclick = ()=>encode('85');
+el('e122').onclick = ()=>encode('122');
+
+function fch_ks(u8){ var s=0, i=0, le=u8.length;
+  for(i=0; i<le; i++) s=(s*31+u8[i])&255;
+  return s;
+}
+
+function verify(m1,m2){
+  if(m1.length!=m2.length) return alert('Error: Length mismatch!');
+  for(let i=0;i<m1.length;i++) if(m1[i]!==m2[i]) return alert('Error: Byte mismatch at '+i);
+  console.log('Verification Successful');
+}
+
+function encode(m){
+  g_mode=m; sT.innerText="Encoding...";
+  setTimeout(()=>{
+    var sum, data, b, i, tmp;
+    sum=fch_ks(g_buf);
+    data=new Uint8Array(g_buf.length+1); data.set(g_buf); data[g_buf.length]=sum;
+    if(m==='64'){
+      tmp=''; for(i=0;i<data.length;i++) tmp+=String.fromCharCode(data[i]); g_res=btoa(tmp);
+      b=fch_dec64(g_res);
+    }
+    if(m==='85'){ g_res=fch_enc85(data); b=fch_dec85(g_res); }
+    if(m==='122'){ g_res=fch_enc122(data); b=fch_dec122(g_res); }
+    
+    let res_bytes = b.slice(0,-1);
+    verify(res_bytes, g_buf);
+    sT.innerText="Done! Format: "+m; sB.style.display="block";
+  },50);
+}
+
+sB.onclick=()=>{
+  const c=`window.g_base${g_mode}="${g_res}";`;
+  const b=new Blob([c],{type:'text/javascript'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b); a.download=g_name+".js"; a.click();
+};
+
+function fch_dec64(s){ var b,i,le,u,pos;
+  if(s.substring(0,5)==='data:'){ pos=s.indexOf(';base64,'); if(pos!==-1) s=s.substring(pos+8); }
+  b=atob(s); le=b.length; u=new Uint8Array(le);
+  for(i=0;i<le;i++)u[i]=b.charCodeAt(i); return u;
+}
+function fch_dec85(s){ var i,j,m,r,o,dv,p,t;
+  t="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
+  m=new Uint8Array(128); for(i=0;i<85;i++) m[t.charCodeAt(i)]=i;
+  r=s.length%5; p=s+(r?"#".repeat(5-r):"");
+  o=new Uint8Array(p.length/5*4); dv=new DataView(o.buffer);
+  for(i=0,j=0;i<p.length;i+=5,j+=4) dv.setUint32(j,m[p.charCodeAt(i)]*52200625+m[p.charCodeAt(i+1)]*614125+m[p.charCodeAt(i+2)]*7225+m[p.charCodeAt(i+3)]*85+m[p.charCodeAt(i+4)]);
+  return r?o.slice(0,r-5):o;
+}
+function fch_dec122(s){ var i,p,d,di,bb,bc,c,il,m;
+  m=new Uint8Array([0,10,13,34,38,92]); d=new Uint8Array(s.length*2); di=0; bb=0; bc=0;
+  p=(b)=>{bb=(bb<<7)|b; bc+=7; if(bc>=8){bc-=8; d[di++]=(bb>>>bc)&255; bb&=(1<<bc)-1;}};
+  for(i=0;i<s.length;i++){ c=s.charCodeAt(i); if(c>127){il=(c>>>8)&7; if(il!==7)p(m[il]); p(c&127);} else p(c); }
+  return d.slice(0,di);
+}
+</script>
+</body>
+</html>
