@@ -18,7 +18,7 @@
 
   // Environment detection
   g_mode = 3; // 1: file, 2: localhost, 3: online
-  if(location.protocol === 'file:') g_mode = 3;
+  if(location.protocol === 'file:') g_mode = 1;
   if(location.host === 'localhost' || location.host === '127.0.0.1') g_mode = 2;
 
   // --- Internal Utilities ---

@@ -5,7 +5,7 @@
 // Максимальная совместимость (2020+, Mobile, OperaMini)
 //(function(){ //скрываем внутренние функции
 window.g_mode_fetch = 3; // 1: file, 2: localhost, 3: online
-if(window.location.protocol === 'file:') g_mode_fetch = 3;
+if(window.location.protocol === 'file:') g_mode_fetch = 1;
 if(window.location.host === 'localhost' || window.location.host === '127.0.0.1') g_mode_fetch = 2;
 
 // Глобальные настройки управления (можно задавать до загрузки либы или менять после)
