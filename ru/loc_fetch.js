@@ -3,10 +3,10 @@
 // Checksum Algorithm: Rolling Hash (s * 31 + val) & 255
 // поддержка Sidecar.js (base64/85/122) + защита от зависания при загрузке скриптов
 // Максимальная совместимость (2020+, Mobile, OperaMini)
-//(function(){ //скрываем внутренние функции
+
 window.g_mode_fetch = 3; // 1: file, 2: localhost, 3: online
-if(window.location.protocol === 'file:') g_mode_fetch = 1;
-if(window.location.host === 'localhost' || window.location.host === '127.0.0.1') g_mode_fetch = 2;
+if(window.location.protocol === 'file:') window.g_mode_fetch = 1;
+if(window.location.host === 'localhost' || window.location.host === '127.0.0.1') window.g_mode_fetch = 2;
 
 // Глобальные настройки управления (можно задавать до загрузки либы или менять после)
 if(window.g_fch === undefined)  window.g_fch = {}; //создаем если нету
@@ -16,6 +16,7 @@ if(g_fch.timeout === undefined) g_fch.timeout = 10000;//если скрипты 
 if(g_fch.file === undefined)    g_fch.file = 0; //режим одного источника ищет .js на сервере и локально, вызов через await!
 g_fch.msg = '/'; //если пусто, то не пишет (для отладки на мобильных)
 g_fch.busy = 0; //флаг занято только для локального режима
+
 //универсальные утилиты
 function fch_get_tabl(txt,key,val,x){ var m, i, s; //val-знач по умолчанию, x-разделитель(|-по умолчанию)
   m = txt.split('\n').map(z=>z.trim()).filter(z=>z);
@@ -191,23 +192,22 @@ async function fch_load_sidecar(url,name,mode,no_ks){
    full_url = fch_full_url(url);
    url = fch_clean_url(url);
    // 1. РЕЖИМ ЛОКАЛЬНОГО SIDECAR (file:// или принудительно через флаг один источник)
-   if(g_mode_fetch === 1 || g_fch.file){
+   if(window.g_mode_fetch === 1 || g_fch.file){
      b = await fch_load_sidecar(url+'.js');
      return fch_make_NativeResponse(b,full_url);
    }
    // 2. СЕТЕВОЙ ЗАПРОС
    try {
-    res = await fch_orig(full_url,init); if(!res.ok) return res;
+    res = await fch_orig(full_url,init); if(!res.ok) throw new Error();
     b = await res.arrayBuffer();
     return fch_make_NativeResponse(b,full_url,res);
    }
    catch(e1){//а вот тут если нету, то можно еще sidecar.js поискать вдруг есть на сервере
     fch_msg('По сети такого нету, поищем sidecar: ' + url);
-    try { b = await fch_load_sidecar(url+'.js'); res = fch_make_NativeResponse(b,full_url);}
-    catch(e2) { res = new Response(null, {status: 404, statusText: e2}); }
-    return res;
+    try { b = await fch_load_sidecar(url+'.js'); return fch_make_NativeResponse(b,full_url); }
+    catch(e2) { return new Response(null, {status: 404, statusText: e2}); }
    }
   }
-  catch(e){alert('случилась фигня какая-то='+e);}
+  catch(e){fch_err(e);}
   finally { g_fch.busy = 0; }
   };

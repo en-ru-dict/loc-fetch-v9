@@ -4,7 +4,12 @@
 // Compatibility: ES6+, Mobile, Legacy Browsers (OperaMini).
 
 (function(){
-  var g_fch, g_mode;
+  var g_fch;
+
+  // Environment detection - Must match source logic
+  window.g_mode_fetch = 3; // 1: file, 2: localhost, 3: online
+  if(location.protocol === 'file:') window.g_mode_fetch = 1;
+  if(location.host === 'localhost' || location.host === '127.0.0.1') window.g_mode_fetch = 2;
 
   // Global configuration
   window.g_fch = window.g_fch || {};
@@ -12,14 +17,9 @@
   g_fch.log = (g_fch.log === undefined) ? 1 : g_fch.log;
   g_fch.alert = (g_fch.alert === undefined) ? 1 : g_fch.alert;
   g_fch.timeout = g_fch.timeout || 10000;
-  g_fch.one_source = g_fch.one_source || 0;
+  g_fch.file = (g_fch.file === undefined) ? 0 : g_fch.file; // Force sidecar mode
   g_fch.msg = '/';
   g_fch.busy = 0;
-
-  // Environment detection
-  g_mode = 3; // 1: file, 2: localhost, 3: online
-  if(location.protocol === 'file:') g_mode = 1;
-  if(location.host === 'localhost' || location.host === '127.0.0.1') g_mode = 2;
 
   // --- Internal Utilities ---
 
@@ -192,10 +192,13 @@ mp3|  audio/mpeg
     
     try {
       full = fch_full_url(url); clean = fch_clean_url(url);
-      if(g_mode === 1 || g_fch.one_source){
+      
+      // ORIGINAL LOGIC: only mode 1 (file) or explicit flag goes straight to sidecar
+      if(window.g_mode_fetch === 1 || g_fch.file){
         b = await fch_load_sidecar(clean + '.js');
         return fch_make_response(b, full);
       }
+      
       try {
         res = await fch_orig(full, init);
         if(!res.ok) throw new Error();
